@@ -124,6 +124,28 @@ class REPL:
                 from prompt_toolkit import PromptSession
                 from prompt_toolkit.history import FileHistory
                 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+                from prompt_toolkit.completion import Completer, Completion
+
+                # Build slash command completer
+                class SlashCompleter(Completer):
+                    def __init__(self, commands):
+                        self._commands = commands
+
+                    def get_completions(self, document, complete_event):
+                        text = document.text_before_cursor
+                        # Only complete after /
+                        if not text.startswith("/"):
+                            return
+                        prefix = text[1:].lower()
+                        for name, cmd in sorted(self._commands.items()):
+                            if name.startswith(prefix):
+                                desc = cmd.description[:40] if hasattr(cmd, 'description') else ""
+                                yield Completion(
+                                    "/" + name,
+                                    start_position=-len(text),
+                                    display=f"/{name}",
+                                    display_meta=desc,
+                                )
 
                 history_file = os.path.join(
                     os.path.expanduser("~"), ".noah", "repl_history"
@@ -133,6 +155,7 @@ class REPL:
                 session = PromptSession(
                     history=FileHistory(history_file),
                     auto_suggest=AutoSuggestFromHistory(),
+                    completer=SlashCompleter(self.commands),
                     multiline=False,
                 )
 
