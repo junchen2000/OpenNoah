@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 import sys
 from typing import Any, Callable
 
@@ -58,8 +59,19 @@ class PowerShellTool(Tool):
             proc = await asyncio.create_subprocess_exec(
                 "powershell", "-NoProfile", "-NonInteractive", "-Command", command,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cwd,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except (asyncio.TimeoutError, asyncio.CancelledError, KeyboardInterrupt):
+                try:
+                    proc.terminate()
+                    await asyncio.sleep(0.5)
+                    if proc.returncode is None:
+                        proc.kill()
+                except ProcessLookupError:
+                    pass
+                return ToolResult(output=f"Command interrupted/timed out after {timeout}s", is_error=True)
             out = stdout.decode("utf-8", errors="replace") if stdout else ""
             err = stderr.decode("utf-8", errors="replace") if stderr else ""
             output = out + (f"\nstderr:\n{err}" if err else "") or "(no output)"

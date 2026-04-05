@@ -85,32 +85,44 @@ class REPL:
         self._running = True
         self.print_welcome()
 
-        while self._running:
-            try:
-                user_input = await self._get_input()
-                if user_input is None:
+        # Install Ctrl+C handler that sets interrupt flag
+        import signal
+        def _sigint_handler(sig, frame):
+            self.console.print("\n[warning]Interrupted[/warning]")
+            self.query_engine.interrupt()
+        original_handler = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, _sigint_handler)
+
+        try:
+            while self._running:
+                try:
+                    user_input = await self._get_input()
+                    if user_input is None:
+                        break
+
+                    user_input = user_input.strip()
+                    if not user_input:
+                        continue
+
+                    # Handle slash commands
+                    if user_input.startswith("/"):
+                        await self._handle_command(user_input)
+                        continue
+
+                    # Process the message
+                    await self._process_message(user_input)
+
+                except KeyboardInterrupt:
+                    self.console.print("\n[warning]Interrupted[/warning]")
+                    self.query_engine.interrupt()
+                    continue
+                except EOFError:
+                    break
+                except SystemExit:
                     break
 
-                user_input = user_input.strip()
-                if not user_input:
-                    continue
-
-                # Handle slash commands
-                if user_input.startswith("/"):
-                    await self._handle_command(user_input)
-                    continue
-
-                # Process the message
-                await self._process_message(user_input)
-
-            except KeyboardInterrupt:
-                self.console.print("\n[warning]Interrupted[/warning]")
-                self.query_engine.interrupt()
-                continue
-            except EOFError:
-                break
-            except SystemExit:
-                break
+        finally:
+            signal.signal(signal.SIGINT, original_handler)
 
         # Clean up MCP connections before exit
         await self._cleanup_mcp()
