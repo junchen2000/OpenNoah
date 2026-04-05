@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "noah-code"
+version = "0.1.0"
+description = "Noah Code - An agentic coding tool (Python port)"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.39.0",
+    "click>=8.1.0",
+    "pydantic>=2.0.0",
+    "rich>=13.0.0",
+    "prompt-toolkit>=3.0.0",
+    "aiohttp>=3.9.0",
+    "aiofiles>=23.0.0",
+    "pyyaml>=6.0",
+    "pathspec>=0.12.0",
+    "watchdog>=4.0.0",
+    "mcp>=1.0.0",
+    "azure-identity>=1.15.0",
+]
+
+[project.scripts]
+noah = "noah_code.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
