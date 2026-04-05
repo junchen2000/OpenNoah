@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any, Callable
 
 from ..tool import Tool, ToolResult
@@ -66,11 +67,20 @@ class AgentTool(Tool):
         system_prompt = (
             "You are a subagent for Noah Code. Complete the given task fully "
             "using the tools available. Be concise in your final report.\n\n"
-            "IMPORTANT: Be persistent. If your first attempt doesn't work, "
+            "IMPORTANT RULES:\n"
+            "- Be persistent. If your first attempt doesn't work, "
             "try alternative approaches immediately — don't just report failure. "
             "Try at least 2-3 different strategies before giving up. "
-            "Only return when you have a concrete result or have exhausted all options."
+            "Only return when you have a concrete result or have exhausted all options.\n"
+            "- Do NOT enter plan mode. Just execute directly.\n"
+            "- Do NOT use interactive commands that require user input (e.g. 'az login', 'az devops login'). "
+            "Assume credentials are already configured.\n"
         )
+        if os.name == 'nt':
+            system_prompt += (
+                "\nIMPORTANT: You are on Windows. ALWAYS use the `powershell` tool, NEVER use `bash`. "
+                "The bash tool on Windows uses cmd.exe which cannot handle these commands.\n"
+            )
         # Inject skills description so the subagent knows about available skills
         skills_desc = getattr(state, '_skills_description', '')
         if skills_desc:
@@ -82,9 +92,13 @@ class AgentTool(Tool):
         if skill_context:
             system_prompt += f"\n\n# Loaded Skill Instructions\n\n{skill_context}"
 
+        # Exclude tools that don't make sense for subagents
+        excluded_tools = {'agent', 'enter_plan_mode', 'exit_plan_mode', 'ask_user', 'config'}
+
         config = SubagentConfig(
             system_prompt=system_prompt,
             max_iterations=10,
+            excluded_tools=excluded_tools,
         )
 
         try:

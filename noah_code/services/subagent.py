@@ -39,6 +39,8 @@ class SubagentConfig:
     temperature: float = 0.0
     # Tool restrictions: if set, only these tool names are allowed
     allowed_tools: list[str] | None = None
+    # Tools to exclude from the subagent
+    excluded_tools: set[str] | None = None
     # If True, only read-only tools are allowed
     read_only: bool = False
     # Overall timeout in seconds (0 = no timeout)
@@ -126,11 +128,12 @@ async def run_subagent(
         tool_results = []
         for tu in tool_uses:
             result.tool_calls += 1
-            _input_summary = json.dumps(tu.input, ensure_ascii=False)[:200]
+            _input_display = _format_tool_input(tu.name, tu.input)
             logger.info("Subagent tool call [%d/%d]: %s(%s)",
-                        iteration + 1, cfg.max_iterations, tu.name, _input_summary)
+                        iteration + 1, cfg.max_iterations, tu.name,
+                        json.dumps(tu.input, ensure_ascii=False)[:200])
             # Print to stderr so the user can see subagent activity
-            print(f"    ⚡ {tu.name}  {_input_summary}", file=sys.stderr, flush=True)
+            print(f"    ⚡ {tu.name}  {_input_display}", file=sys.stderr, flush=True)
             tool_result = await _execute_tool(tu, tools, cwd)
             logger.info("Subagent tool result [%s]: %s", tu.name, tool_result[:300])
             _result_preview = tool_result[:120].replace("\n", " ")
@@ -159,7 +162,10 @@ def _get_filtered_tools(
 
     if config.allowed_tools is not None:
         allowed = set(config.allowed_tools)
-        return [t for t in all_tools if t.name in allowed]
+        all_tools = [t for t in all_tools if t.name in allowed]
+
+    if config.excluded_tools:
+        all_tools = [t for t in all_tools if t.name not in config.excluded_tools]
 
     if config.read_only:
         # Only tools that are always read-only
@@ -208,3 +214,36 @@ def _serialize_content(content: list) -> list[dict[str, Any]]:
                 "input": block.input,
             })
     return serialized
+
+
+def _format_tool_input(name: str, tool_input: dict[str, Any]) -> str:
+    """Format tool input concisely for stderr display."""
+    if name in ("bash", "powershell"):
+        cmd = tool_input.get("command", "")
+        return cmd[:150] if cmd else ""
+    elif name == "file_read":
+        fp = tool_input.get("file_path", "")
+        start = tool_input.get("start_line")
+        end = tool_input.get("end_line")
+        suffix = f" L{start}-{end}" if start else ""
+        return f"{fp}{suffix}"
+    elif name in ("file_edit", "file_write"):
+        return tool_input.get("file_path", "")
+    elif name == "grep":
+        pattern = tool_input.get("pattern", "")
+        path = tool_input.get("path", "")
+        return f"'{pattern}'" + (f" in {path}" if path else "")
+    elif name == "glob":
+        return tool_input.get("pattern", "")
+    elif name == "web_fetch":
+        return tool_input.get("url", "")[:100]
+    elif name == "web_search":
+        return f"'{tool_input.get('query', '')}'"
+    elif name == "list_dir":
+        return tool_input.get("path", ".")
+    # Fallback: first value
+    if tool_input:
+        first_key = next(iter(tool_input))
+        val = str(tool_input[first_key])[:100]
+        return f"{first_key}={val}"
+    return ""
