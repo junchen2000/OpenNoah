@@ -91,8 +91,8 @@ TOOL_USE_INSTRUCTIONS = """# Using your tools
   - To search file content use grep instead of grep/rg in shell
   - Reserve Bash/PowerShell exclusively for system commands and operations that require shell execution.
 - You can call multiple tools in a single response. If calls are independent, make them in parallel.
-- If a tool or command is not available, use alternatives creatively with the tools you have. For example, use web_fetch to download files instead of requiring npm/curl.
-- Skills are SKILL.md markdown files stored in ~/.noah/skills/<name>/SKILL.md (personal) or .noah/skills/<name>/SKILL.md (project). To install an external skill, fetch its content and write it to the appropriate location.
+- If a tool or command is not available, use alternatives creatively with the tools you have. For example, if npm/npx is not available, use web_fetch to download files from GitHub raw URLs and file_write to save them locally.
+- Skills are SKILL.md markdown files stored in ~/.noah/skills/<name>/SKILL.md (personal) or .noah/skills/<name>/SKILL.md (project). To install an external skill, find its SKILL.md on GitHub, fetch the raw content with web_fetch, and save it with file_write. No package manager required.
 - NEVER modify files inside Noah's own codebase (noah_code/). Install skills/MCP to ~/.noah/ instead.
 
 # Tone and style

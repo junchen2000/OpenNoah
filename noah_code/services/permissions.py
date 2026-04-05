@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..types import PermissionBehavior, PermissionMode, PermissionResult
+from ..config import get_config_dir
 
 if TYPE_CHECKING:
     from ..state import AppState
@@ -69,8 +70,17 @@ def _is_noah_codebase(path_str: str, cwd: str = "") -> bool:
 
 
 def _is_dangerous_path(path_str: str) -> bool:
-    """Check if a path targets a dangerous file or directory."""
+    """Check if a path targets a dangerous file or directory.
+
+    Exception: ~/.noah/skills/ and ~/.noah/mcp.json are allowed (skill/MCP installation).
+    """
     normalized = path_str.replace("\\", "/")
+
+    # Allow writes to ~/.noah/skills/ and ~/.noah/mcp.json (skill/MCP installation)
+    noah_dir = str(get_config_dir()).replace("\\", "/")
+    if normalized.startswith(noah_dir + "/skills/") or normalized.endswith("/mcp.json"):
+        return False
+
     basename = os.path.basename(normalized)
     if basename.lower() in {f.lower() for f in DANGEROUS_FILES}:
         return True
