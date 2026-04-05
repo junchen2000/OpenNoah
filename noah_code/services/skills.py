@@ -152,14 +152,9 @@ def load_skills_from_dir(base_path: Path, source: str) -> list[Skill]:
 def discover_skills(cwd: str = "") -> list[Skill]:
     """Discover all skills from all directories.
 
-    Priority (later overrides earlier): agents-standard < project < personal.
+    Priority (later overrides earlier): project < personal.
     """
     seen: dict[str, Skill] = {}
-
-    # Agent Skills open standard: ~/.agents/skills/ (lowest priority)
-    agents_skills_dir = Path.home() / ".agents" / "skills"
-    for skill in load_skills_from_dir(agents_skills_dir, "agents"):
-        seen[skill.name] = skill
 
     # Project-level skills
     if cwd:
@@ -173,6 +168,32 @@ def discover_skills(cwd: str = "") -> list[Skill]:
         seen[skill.name] = skill
 
     return list(seen.values())
+
+
+def install_skill_from_agents_dir(name: str) -> bool:
+    """Copy a skill from ~/.agents/skills/<name>/ to ~/.noah/skills/<name>/.
+
+    Used after npx skills add to bring a skill into Noah's scope.
+    Returns True if successful.
+    """
+    src = Path.home() / ".agents" / "skills" / name / "SKILL.md"
+    if not src.exists():
+        return False
+
+    dst_dir = get_config_dir() / "skills" / name
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    dst = dst_dir / "SKILL.md"
+
+    import shutil
+    # Copy the entire skill directory (SKILL.md + any supporting files)
+    src_dir = src.parent
+    for item in src_dir.iterdir():
+        if item.is_file():
+            shutil.copy2(item, dst_dir / item.name)
+        elif item.is_dir():
+            shutil.copytree(item, dst_dir / item.name, dirs_exist_ok=True)
+
+    return dst.exists()
 
 
 def substitute_arguments(content: str, args: str) -> str:

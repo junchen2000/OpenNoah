@@ -93,6 +93,8 @@ TOOL_USE_INSTRUCTIONS = """# Using your tools
 - You can call multiple tools in a single response. If calls are independent, make them in parallel.
 - If a tool or command is not available, use alternatives creatively with the tools you have. For example, if npm/npx is not available, use web_fetch to download files from GitHub raw URLs and file_write to save them locally.
 - Skills are SKILL.md markdown files stored in ~/.noah/skills/<name>/SKILL.md (personal) or .noah/skills/<name>/SKILL.md (project). To install an external skill, find its SKILL.md on GitHub, fetch the raw content with web_fetch, and save it with file_write. No package manager required.
+- If npx/npm is available, you can also run: npx --yes skills add <source> --skill <name> -g -y --copy
+  After npx installs to ~/.agents/skills/, copy the skill to Noah's directory using the install_skill_from_agents_dir function, or manually copy the SKILL.md file.
 - NEVER modify files inside Noah's own codebase (noah_code/). Install skills/MCP to ~/.noah/ instead.
 
 # Tone and style

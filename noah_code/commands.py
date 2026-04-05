@@ -571,7 +571,38 @@ async def cmd_skills(state: AppState, args: str, commands: dict[str, Command]) -
         )
         return f"Created skill template at {skill_file}"
 
-    return "Usage: /skills [list|show <name>|init <name>]"
+    elif action == "import":
+        # Import a skill from ~/.agents/skills/ (after npx skills add)
+        from .services.skills import install_skill_from_agents_dir
+        if len(subcmd) < 2:
+            # List what's available to import
+            from pathlib import Path
+            agents_dir = Path.home() / ".agents" / "skills"
+            if not agents_dir.is_dir():
+                return "No skills found in ~/.agents/skills/. Run 'npx skills add <source>' first."
+            available = [d.name for d in agents_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists()]
+            if not available:
+                return "No skills found in ~/.agents/skills/."
+            return "Available to import:\n" + "\n".join(f"  {n}" for n in available) + "\n\nUsage: /skills import <name> or /skills import all"
+
+        target = subcmd[1].strip().lower()
+        if target == "all":
+            from pathlib import Path
+            agents_dir = Path.home() / ".agents" / "skills"
+            imported = []
+            for d in agents_dir.iterdir():
+                if d.is_dir() and (d / "SKILL.md").exists():
+                    if install_skill_from_agents_dir(d.name):
+                        imported.append(d.name)
+            if imported:
+                return f"Imported {len(imported)} skills: {', '.join(imported)}"
+            return "No skills to import."
+        else:
+            if install_skill_from_agents_dir(target):
+                return f"Imported skill '{target}' to {get_config_dir() / 'skills' / target}"
+            return f"Skill '{target}' not found in ~/.agents/skills/. Run 'npx skills add <source>' first."
+
+    return "Usage: /skills [list|show <name>|init <name>|import [name|all]]"
 
 
 def register_skill_commands(
