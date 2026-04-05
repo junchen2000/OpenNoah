@@ -43,6 +43,13 @@ class QueryEngine:
         self._current_turn = 0
         self._compact_failures = 0
 
+        # Session memory
+        from .services.session_memory import SessionMemory
+        self._session_memory = SessionMemory(
+            session_id=state.session_id,
+            cwd=state.cwd,
+        )
+
     def interrupt(self) -> None:
         """Interrupt the current query."""
         self._abort = True
@@ -150,11 +157,12 @@ class QueryEngine:
             # Auto-compact if approaching context limit
             await self._auto_compact_if_needed()
 
-            # Build system prompt
+            # Build system prompt (includes session notes if available)
+            session_notes = self._session_memory.get_context_for_prompt()
             system_prompt = await build_system_prompt(
                 cwd=self.state.cwd,
                 custom_system_prompt=self.state.custom_system_prompt,
-                append_system_prompt=self.state.append_system_prompt,
+                append_system_prompt=(self.state.append_system_prompt or "") + session_notes,
                 skills_description=getattr(self.state, '_skills_description', ''),
             )
 
@@ -271,6 +279,10 @@ class QueryEngine:
                     on_tool_end=on_tool_end,
                 )
 
+                # Track tool calls for session memory
+                for _ in tool_uses:
+                    self._session_memory.record_tool_call()
+
                 # Add tool results as a user message
                 result_blocks: list[ContentBlock] = []
                 for tool_use, result in zip(tool_uses, tool_results):
@@ -316,6 +328,8 @@ class QueryEngine:
                 continue
 
             # No tool use - we're done
+            # Post-turn: update session memory in background
+            await self._post_turn_hooks()
             return assistant_msg
 
         logger.warning("Max iterations reached (%d)", max_iterations)
@@ -457,6 +471,22 @@ class QueryEngine:
         self.state._skills = skills
         self.state._skills_description = get_skills_description(skills)
         logger.info("Reloaded skills: %d total", len(skills))
+
+    async def _post_turn_hooks(self) -> None:
+        """Run after each complete turn (no more tool calls).
+
+        - Update session memory if threshold met
+        """
+        try:
+            if self._session_memory.should_update(self.state.total_input_tokens):
+                await self._session_memory.update(
+                    api_client=self.api_client,
+                    tool_registry=self.tool_registry,
+                    messages=self.state.messages,
+                    current_input_tokens=self.state.total_input_tokens,
+                )
+        except Exception as e:
+            logger.debug("Post-turn hooks error: %s", e)
 
     def _prepare_messages(self) -> list[dict[str, Any]]:
         """Prepare messages for the API call."""
