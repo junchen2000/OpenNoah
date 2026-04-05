@@ -126,6 +126,9 @@ async def run_subagent(
 
         # Execute tool calls
         tool_results = []
+        if iteration == 0 and tool_uses:
+            # Newline after the parent tool header (which prints with end="")
+            print("", file=sys.stderr, flush=True)
         for tu in tool_uses:
             result.tool_calls += 1
             _input_display = _format_tool_input(tu.name, tu.input)
