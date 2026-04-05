@@ -128,6 +128,7 @@ class SessionMemory:
             max_tokens=2048,
             temperature=0.0,
             allowed_tools=["file_read", "file_edit", "file_write"],
+            timeout=60.0,
         )
 
         try:
@@ -157,21 +158,40 @@ class SessionMemory:
         self._tool_calls_since_update = 0
 
     def _build_context(self, messages: list[Any]) -> list[dict[str, Any]]:
-        """Build context messages for the subagent (recent conversation)."""
-        # Take last ~20 messages, convert to API format
+        """Build context messages for the subagent (recent conversation).
+
+        Strips tool_use and tool_result blocks so the context only contains
+        plain text user/assistant messages. This avoids the API requirement
+        that every tool_calls block must be followed by a matching tool result.
+        """
         recent = messages[-20:] if len(messages) > 20 else messages
         context = []
 
         for msg in recent:
             try:
                 api_format = msg.to_api_format()
-                if api_format["role"] in ("user", "assistant"):
-                    # Truncate long content
-                    content = api_format.get("content", "")
-                    if isinstance(content, str) and len(content) > 2000:
-                        content = content[:2000] + "\n... [truncated]"
-                        api_format["content"] = content
-                    context.append(api_format)
+                role = api_format["role"]
+                if role not in ("user", "assistant"):
+                    continue
+
+                content = api_format.get("content", "")
+
+                if isinstance(content, list):
+                    # Keep only text blocks, drop tool_use / tool_result / thinking
+                    text_parts = [
+                        b for b in content
+                        if isinstance(b, dict) and b.get("type") == "text"
+                    ]
+                    if not text_parts:
+                        continue  # skip messages with no text
+                    content = text_parts
+
+                # Truncate long string content
+                if isinstance(content, str) and len(content) > 2000:
+                    content = content[:2000] + "\n... [truncated]"
+
+                api_format["content"] = content
+                context.append(api_format)
             except Exception:
                 continue
 

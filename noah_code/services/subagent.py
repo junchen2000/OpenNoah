@@ -40,6 +40,8 @@ class SubagentConfig:
     allowed_tools: list[str] | None = None
     # If True, only read-only tools are allowed
     read_only: bool = False
+    # Overall timeout in seconds (0 = no timeout)
+    timeout: float = 120.0
 
 
 @dataclass
@@ -116,13 +118,18 @@ async def run_subagent(
         if not tool_uses:
             # No tool calls — subagent is done
             result.text = assistant_text
+            logger.info("Subagent finished (iter %d): %s", iteration + 1, assistant_text[:200])
             break
 
         # Execute tool calls
         tool_results = []
         for tu in tool_uses:
             result.tool_calls += 1
+            logger.info("Subagent tool call [%d/%d]: %s(%s)",
+                        iteration + 1, cfg.max_iterations, tu.name,
+                        json.dumps(tu.input, ensure_ascii=False)[:200])
             tool_result = await _execute_tool(tu, tools, cwd)
+            logger.info("Subagent tool result [%s]: %s", tu.name, tool_result[:300])
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tu.id,

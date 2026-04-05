@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 import time
@@ -123,6 +124,10 @@ class REPL:
 
         finally:
             signal.signal(signal.SIGINT, original_handler)
+
+        # Suppress noisy credential/async errors during shutdown
+        logging.getLogger("azure.identity").setLevel(logging.CRITICAL)
+        logging.getLogger("azure.core").setLevel(logging.CRITICAL)
 
         # Clean up MCP connections before exit
         await self._cleanup_mcp()
@@ -355,7 +360,7 @@ class REPL:
 def _format_tool_detail(name: str, tool_input: dict) -> str:
     """Format tool input as a concise detail string shown at execution start."""
     detail_map = {
-        "bash": lambda i: f"[dim]$ {i.get('command', '')[:80]}[/dim]",
+        "bash": lambda i: f"[dim]$ {i.get('command', '')[:120]}[/dim]",
         "file_read": lambda i: f"[dim]{i.get('file_path', '')}"
                                + (f" L{i.get('start_line')}-{i.get('end_line')}" if i.get('start_line') else "")
                                + "[/dim]",
@@ -367,16 +372,16 @@ def _format_tool_detail(name: str, tool_input: dict) -> str:
                           + (f" --include={i.get('include')}" if i.get('include') else "")
                           + "[/dim]",
         "list_dir": lambda i: f"[dim]{i.get('path', '.')}[/dim]",
-        "web_fetch": lambda i: f"[dim]{i.get('url', '')[:60]}[/dim]",
+        "web_fetch": lambda i: f"[dim]{i.get('url', '')[:100]}[/dim]",
         "web_search": lambda i: f"[dim]'{i.get('query', '')}'[/dim]",
-        "agent": lambda i: f"[dim]{i.get('task', i.get('prompt', ''))[:60]}[/dim]",
-        "repl": lambda i: f"[dim]({i.get('language', 'python')}) {i.get('code', '').split(chr(10))[0][:50]}[/dim]",
+        "agent": lambda i: f"[dim]{i.get('task', i.get('prompt', ''))[:120]}[/dim]",
+        "repl": lambda i: f"[dim]({i.get('language', 'python')}) {i.get('code', '').split(chr(10))[0][:80]}[/dim]",
         "notebook_edit": lambda i: f"[dim]{i.get('action', '')} {i.get('file_path', '')}[/dim]",
         "todo_write": lambda i: f"[dim]{len(i.get('todos', []))} items[/dim]",
         "sleep": lambda i: f"[dim]{i.get('seconds', 0)}s[/dim]",
-        "ask_user": lambda i: f"[dim]{i.get('question', '')[:60]}[/dim]",
+        "ask_user": lambda i: f"[dim]{i.get('question', '')[:100]}[/dim]",
         "config": lambda i: f"[dim]{i.get('action', '')} {i.get('key', '')}[/dim]",
-        "powershell": lambda i: f"[dim]PS> {i.get('command', '')[:70]}[/dim]",
+        "powershell": lambda i: f"[dim]PS> {i.get('command', '')[:120]}[/dim]",
         "task_create": lambda i: f"[dim]{i.get('description', '')[:60]}[/dim]",
         "task_stop": lambda i: f"[dim]{i.get('task_id', '')}[/dim]",
         "tool_search": lambda i: f"[dim]'{i.get('query', '')}'[/dim]",
