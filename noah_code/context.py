@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from .config import SYSTEM_PROMPT_PREFIX, TOOL_USE_INSTRUCTIONS, get_noah_md_path
+from .config import SYSTEM_PROMPT_PREFIX, TOOL_USE_INSTRUCTIONS, get_noah_md_path, get_config_dir
 
 
 async def get_git_status(cwd: str) -> str:
@@ -118,11 +118,14 @@ async def build_system_prompt(
     prompt += f"- Current date: {datetime.now().strftime('%Y-%m-%d')}\n"
     prompt += f"- Operating system: {os.name}\n"
     prompt += f"- Platform: {_get_platform()}\n"
+    prompt += f"- Noah config directory: {get_config_dir()}\n"
+    prompt += f"- Skills directory: {get_config_dir() / 'skills'}\n"
 
     # Platform-specific tool guidance
     if os.name == "nt":
         prompt += ("\nIMPORTANT: On Windows, prefer the `powershell` tool over `bash` for running commands. "
-                   "The `bash` tool uses cmd.exe on Windows and does not support bash/unix syntax.\n")
+                   "The `bash` tool uses cmd.exe on Windows and does not support bash/unix syntax.\n"
+                   "IMPORTANT: On Windows, do NOT use ~ for home paths. Use the exact Noah config directory shown above.\n")
 
     # Add skills description
     if skills_description:
