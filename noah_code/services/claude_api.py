@@ -64,20 +64,22 @@ class NoahAPIClient:
         self.last_usage: UsageStats | None = None
         # Detect Azure OpenAI by URL pattern
         self.is_azure = "openai.azure.com" in self.base_url
-        # Azure AD credential (lazy init)
+        # Azure AD credential (lazy init, pinned to startup tenant)
         self._azure_credential = None
         self._azure_token: str = ""
         self._azure_token_expires: float = 0
+        self._azure_tenant_id: str | None = None  # Pinned at first auth
 
     async def _get_azure_ad_token(self) -> str:
         """Get an Azure AD bearer token for Cognitive Services.
 
-        Uses DefaultAzureCredential which tries (in order):
+        IMPORTANT: This pins to the tenant active at first auth. Skills that
+        run 'az login --tenant X' for other resources won't affect LLM calls.
+
+        Uses (in order):
         - Environment variables (AZURE_CLIENT_ID/SECRET/TENANT_ID)
-        - Managed Identity
-        - Azure CLI (`az login`)
+        - Azure CLI credential pinned to the initial tenant
         - VS Code credential
-        - Azure PowerShell
         """
         import time as _time
         # Return cached token if still valid (5 min buffer)
@@ -85,8 +87,7 @@ class NoahAPIClient:
             return self._azure_token
 
         if self._azure_credential is None:
-            from azure.identity import DefaultAzureCredential
-            self._azure_credential = DefaultAzureCredential()
+            self._azure_credential = self._create_pinned_credential()
 
         # Run the sync get_token in a thread to avoid blocking
         import asyncio
@@ -97,6 +98,49 @@ class NoahAPIClient:
         self._azure_token = token_obj.token
         self._azure_token_expires = token_obj.expires_on
         return self._azure_token
+
+    def _create_pinned_credential(self):
+        """Create an Azure credential pinned to the current tenant.
+
+        Captures the tenant ID from the current az CLI session at first call,
+        then uses it for all subsequent token requests — immune to az login changes.
+        """
+        from azure.identity import ChainedTokenCredential, AzureCLICredential, VisualStudioCodeCredential
+
+        # Check for explicit tenant from env
+        import os
+        tenant = os.environ.get("AZURE_TENANT_ID")
+
+        if not tenant:
+            # Discover current tenant from az CLI
+            tenant = self._get_current_az_tenant()
+
+        if tenant:
+            self._azure_tenant_id = tenant
+            logger.info("Azure auth pinned to tenant: %s", tenant)
+            return ChainedTokenCredential(
+                AzureCLICredential(tenant_id=tenant),
+                VisualStudioCodeCredential(tenant_id=tenant),
+            )
+        else:
+            # Fallback to default chain
+            from azure.identity import DefaultAzureCredential
+            return DefaultAzureCredential()
+
+    @staticmethod
+    def _get_current_az_tenant() -> str | None:
+        """Get the current Azure CLI tenant ID (synchronous, one-time)."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["az", "account", "show", "--query", "tenantId", "-o", "tsv"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        return None
 
     def _build_url(self) -> str:
         """Build the chat completions endpoint URL."""
