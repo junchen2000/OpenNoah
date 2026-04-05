@@ -107,6 +107,12 @@ async def build_system_prompt(
     if user_context:
         prompt += f"\n# User's Project Instructions (NOAH.md)\n\n{user_context}\n"
 
+    # Add cross-session memories
+    from .services.memories import get_memory_context
+    memory_context = get_memory_context()
+    if memory_context:
+        prompt += f"\n{memory_context}\n"
+
     # Add git status
     git_status = await get_git_status(cwd)
     if git_status:

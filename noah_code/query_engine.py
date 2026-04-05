@@ -41,10 +41,36 @@ class QueryEngine:
         self.cost_tracker = CostTracker()
         self._abort = False
         self._current_turn = 0
+        self._compact_failures = 0
 
     def interrupt(self) -> None:
         """Interrupt the current query."""
         self._abort = True
+
+    async def _auto_compact_if_needed(self) -> None:
+        """Check token usage and auto-compact if approaching context limit."""
+        from .services.compact import should_compact, compact_with_llm
+
+        if self._compact_failures >= 3:
+            return  # Circuit breaker: stop trying after 3 failures
+
+        if not should_compact(
+            self.state.messages,
+            self.state.total_input_tokens,
+            self.state.total_output_tokens,
+        ):
+            return
+
+        logger.info("Auto-compacting conversation (%d messages, ~%d input tokens)",
+                     len(self.state.messages), self.state.total_input_tokens)
+
+        try:
+            compacted = await compact_with_llm(self.state.messages, self.api_client)
+            self.state.messages = compacted
+            logger.info("Auto-compact complete: %d messages remaining", len(compacted))
+        except Exception as e:
+            self._compact_failures += 1
+            logger.error("Auto-compact failed (%d/3): %s", self._compact_failures, e)
 
     async def _prompt_permission(self, tool_use: ToolUseBlock, message: str) -> bool:
         """Prompt the user to approve or deny a tool call.
@@ -120,6 +146,9 @@ class QueryEngine:
                 return None
 
             iteration += 1
+
+            # Auto-compact if approaching context limit
+            await self._auto_compact_if_needed()
 
             # Build system prompt
             system_prompt = await build_system_prompt(

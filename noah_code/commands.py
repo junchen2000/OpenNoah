@@ -80,15 +80,25 @@ async def cmd_cwd(state: AppState, args: str, commands: dict[str, Command]) -> s
 
 
 async def cmd_compact(state: AppState, args: str, commands: dict[str, Command]) -> str | None:
-    """Compact conversation history (keep system messages and last exchange)."""
-    if len(state.messages) <= 2:
-        return "Nothing to compact."
+    """Compact conversation history using LLM-powered summarization."""
+    if len(state.messages) <= 4:
+        return "Nothing to compact (need more than 4 messages)."
 
-    # Keep the last user message and assistant response
-    kept = state.messages[-2:] if len(state.messages) >= 2 else state.messages[:]
-    removed = len(state.messages) - len(kept)
-    state.messages = kept
-    return f"Compacted: removed {removed} messages, kept {len(kept)}."
+    from .services.compact import compact_with_llm
+    from .services.claude_api import NoahAPIClient
+
+    original_count = len(state.messages)
+    try:
+        client = NoahAPIClient(model=state.model, base_url=state.base_url, api_key=state.api_key)
+        compacted = await compact_with_llm(state.messages, client)
+        state.messages = compacted
+        return f"Compacted: {original_count} → {len(compacted)} messages (LLM summary + recent)."
+    except Exception as e:
+        # Fallback: simple truncation
+        kept = state.messages[-4:]
+        removed = len(state.messages) - len(kept)
+        state.messages = kept
+        return f"Compacted (simple fallback): removed {removed} messages. (LLM failed: {e})"
 
 
 async def cmd_verbose(state: AppState, args: str, commands: dict[str, Command]) -> str | None:
@@ -193,7 +203,28 @@ async def cmd_memory(state: AppState, args: str, commands: dict[str, Command]) -
             f.write(f"\n{text}\n")
         return f"Added to {project_md}"
 
-    return "Usage: /memory [show|add <text>]"
+    elif action == "save":
+        # Save a cross-session memory note
+        if len(subcmd) < 2:
+            return "Usage: /memory save <text to remember across sessions>"
+        from .services.memories import save_memory
+        path = save_memory(subcmd[1], category="user", source_session=state.session_id)
+        return f"Memory saved to {path}"
+
+    elif action == "list":
+        # List cross-session memories
+        from .services.memories import load_memories
+        mems = load_memories(limit=10)
+        if not mems:
+            return "No cross-session memories saved yet. Use /memory save <text>."
+        lines = ["Cross-session memories:", ""]
+        for m in mems:
+            content = m["content"].strip().split("\n")
+            text = next((l for l in content if not l.startswith("<!--")), "")[:80]
+            lines.append(f"  [{m['category']}] {text}")
+        return "\n".join(lines)
+
+    return "Usage: /memory [show|add <text>|save <text>|list]"
 
 
 # ── Doctor (diagnostics) ─────────────────────────────────────
