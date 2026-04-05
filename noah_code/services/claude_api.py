@@ -105,7 +105,7 @@ class NoahAPIClient:
         Captures the tenant ID from the current az CLI session at first call,
         then uses it for all subsequent token requests — immune to az login changes.
         """
-        from azure.identity import ChainedTokenCredential, AzureCLICredential, VisualStudioCodeCredential
+        from azure.identity import ChainedTokenCredential, AzureCliCredential, VisualStudioCodeCredential
 
         # Check for explicit tenant from env
         import os
@@ -119,7 +119,7 @@ class NoahAPIClient:
             self._azure_tenant_id = tenant
             logger.info("Azure auth pinned to tenant: %s", tenant)
             return ChainedTokenCredential(
-                AzureCLICredential(tenant_id=tenant),
+                AzureCliCredential(tenant_id=tenant),
                 VisualStudioCodeCredential(tenant_id=tenant),
             )
         else:
@@ -130,10 +130,15 @@ class NoahAPIClient:
     @staticmethod
     def _get_current_az_tenant() -> str | None:
         """Get the current Azure CLI tenant ID (synchronous, one-time)."""
+        import shutil
         import subprocess
+        # Find az CLI (on Windows it's az.cmd)
+        az_path = shutil.which("az") or shutil.which("az.cmd")
+        if not az_path:
+            return None
         try:
             result = subprocess.run(
-                ["az", "account", "show", "--query", "tenantId", "-o", "tsv"],
+                [az_path, "account", "show", "--query", "tenantId", "-o", "tsv"],
                 capture_output=True, text=True, timeout=10,
             )
             if result.returncode == 0 and result.stdout.strip():
