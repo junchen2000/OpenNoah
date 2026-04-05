@@ -196,6 +196,36 @@ def install_skill_from_agents_dir(name: str) -> bool:
     return dst.exists()
 
 
+def auto_import_from_agents_dir() -> list[str]:
+    """Auto-import any new skills from ~/.agents/skills/ to ~/.noah/skills/.
+
+    Only imports skills that don't already exist in Noah's personal skills dir.
+    Returns list of newly imported skill names.
+    """
+    agents_dir = Path.home() / ".agents" / "skills"
+    if not agents_dir.is_dir():
+        return []
+
+    noah_skills_dir = get_config_dir() / "skills"
+    imported = []
+
+    try:
+        for entry in agents_dir.iterdir():
+            if not entry.is_dir():
+                continue
+            if not (entry / "SKILL.md").exists():
+                continue
+            # Skip if already in Noah's skills
+            if (noah_skills_dir / entry.name / "SKILL.md").exists():
+                continue
+            if install_skill_from_agents_dir(entry.name):
+                imported.append(entry.name)
+    except OSError as e:
+        logger.warning("Failed to scan ~/.agents/skills/: %s", e)
+
+    return imported
+
+
 def substitute_arguments(content: str, args: str) -> str:
     """Replace argument placeholders in skill content.
 

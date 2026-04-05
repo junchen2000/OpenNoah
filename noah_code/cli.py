@@ -279,9 +279,12 @@ def main(
     # Create tool registry
     tool_registry = create_tool_registry()
 
-    # Load skills
-    from .services.skills import discover_skills, get_skills_description
+    # Load skills (auto-import from ~/.agents/skills/ first)
+    from .services.skills import discover_skills, get_skills_description, auto_import_from_agents_dir
     from .commands import register_skill_commands
+    imported = auto_import_from_agents_dir()
+    if imported:
+        click.echo(f"Skills: imported {len(imported)} from ~/.agents/: {', '.join(imported)}", err=True)
     discovered_skills = discover_skills(work_dir)
     if discovered_skills:
         click.echo(f"Skills: {len(discovered_skills)} loaded", err=True)
