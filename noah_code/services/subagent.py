@@ -136,8 +136,8 @@ async def run_subagent(
             print(f"    ⚡ {tu.name}  {_input_display}", file=sys.stderr, flush=True)
             tool_result = await _execute_tool(tu, tools, cwd)
             logger.info("Subagent tool result [%s]: %s", tu.name, tool_result[:300])
-            _result_preview = tool_result[:120].replace("\n", " ")
-            print(f"      → {_result_preview}", file=sys.stderr, flush=True)
+            _result_summary = _format_tool_result_summary(tu.name, tool_result)
+            print(f"      → {_result_summary}", file=sys.stderr, flush=True)
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tu.id,
@@ -220,7 +220,12 @@ def _format_tool_input(name: str, tool_input: dict[str, Any]) -> str:
     """Format tool input concisely for stderr display."""
     if name in ("bash", "powershell"):
         cmd = tool_input.get("command", "")
-        return cmd[:150] if cmd else ""
+        # For chained commands, show just the last meaningful one
+        parts = cmd.split(";")
+        last = parts[-1].strip() if parts else cmd
+        if len(last) > 10:
+            return last[:120]
+        return cmd[:120]
     elif name == "file_read":
         fp = tool_input.get("file_path", "")
         start = tool_input.get("start_line")
@@ -247,3 +252,43 @@ def _format_tool_input(name: str, tool_input: dict[str, Any]) -> str:
         val = str(tool_input[first_key])[:100]
         return f"{first_key}={val}"
     return ""
+
+
+def _format_tool_result_summary(name: str, output: str) -> str:
+    """Format tool result concisely for stderr display."""
+    lines = output.strip().split("\n")
+    line_count = len(lines)
+
+    if name in ("bash", "powershell"):
+        # Check for error indicators
+        if output.startswith("Exit code:"):
+            first_line = lines[0] if lines else ""
+            return f"{first_line}"
+        if output.startswith("Error") or output.startswith("Command interrupted"):
+            return lines[0][:120] if lines else "error"
+        if output.startswith("stderr:"):
+            return lines[0][:120] if lines else "error"
+        # Success: show line count
+        if line_count == 1 and len(lines[0]) < 80:
+            return lines[0]
+        return f"({line_count} lines of output)"
+    elif name == "file_read":
+        return f"({line_count} lines)"
+    elif name in ("file_edit", "file_write"):
+        return lines[0][:80] if lines else "done"
+    elif name == "grep":
+        if "No matches" in output:
+            return "no matches"
+        return lines[0][:80] if lines else ""
+    elif name == "glob":
+        return lines[0][:80] if lines else ""
+    elif name == "list_dir":
+        return f"({line_count} entries)"
+
+    # Default: first line, capped
+    first = lines[0] if lines else ""
+    if len(first) > 80:
+        first = first[:77] + "..."
+    if line_count > 1:
+        return f"{first} (+{line_count - 1} more lines)"
+    return first
