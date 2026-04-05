@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
@@ -125,11 +126,15 @@ async def run_subagent(
         tool_results = []
         for tu in tool_uses:
             result.tool_calls += 1
+            _input_summary = json.dumps(tu.input, ensure_ascii=False)[:200]
             logger.info("Subagent tool call [%d/%d]: %s(%s)",
-                        iteration + 1, cfg.max_iterations, tu.name,
-                        json.dumps(tu.input, ensure_ascii=False)[:200])
+                        iteration + 1, cfg.max_iterations, tu.name, _input_summary)
+            # Print to stderr so the user can see subagent activity
+            print(f"    ⚡ {tu.name}  {_input_summary}", file=sys.stderr, flush=True)
             tool_result = await _execute_tool(tu, tools, cwd)
             logger.info("Subagent tool result [%s]: %s", tu.name, tool_result[:300])
+            _result_preview = tool_result[:120].replace("\n", " ")
+            print(f"      → {_result_preview}", file=sys.stderr, flush=True)
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tu.id,
