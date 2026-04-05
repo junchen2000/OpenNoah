@@ -53,6 +53,24 @@ def _setup_logging(verbose: bool, debug: bool) -> None:
     )
 
 
+def _fix_path() -> None:
+    """Auto-detect common tools not in PATH and add them."""
+    import shutil
+    if sys.platform != "win32":
+        return
+
+    # Common install locations to check
+    candidates = [
+        ("node", r"C:\Program Files\nodejs"),
+        ("git", r"C:\Program Files\Git\cmd"),
+        ("rg", r"C:\Program Files\ripgrep"),
+    ]
+    for cmd, directory in candidates:
+        if shutil.which(cmd) is None and os.path.isdir(directory):
+            os.environ["PATH"] = directory + ";" + os.environ.get("PATH", "")
+            logger.debug("Added %s to PATH", directory)
+
+
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(VERSION, "-v", "--version")
 @click.option(
@@ -178,6 +196,9 @@ def main(
         echo "query" | noah -p    # Pipe input
     """
     _setup_logging(verbose, debug)
+
+    # Auto-detect common tools not in PATH (Node.js, etc.)
+    _fix_path()
 
     # Resolve working directory
     work_dir = cwd or os.getcwd()
