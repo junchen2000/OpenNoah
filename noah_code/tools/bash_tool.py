@@ -29,7 +29,7 @@ class BashTool(Tool):
             },
             "timeout": {
                 "type": "integer",
-                "description": "Timeout in seconds. Default 300.",
+                "description": "Timeout in seconds. Default 60.",
             },
         },
         "required": ["command"],
@@ -63,7 +63,7 @@ class BashTool(Tool):
         on_progress: Callable[[dict[str, Any]], None] | None = None,
     ) -> ToolResult:
         command = tool_input.get("command", "")
-        timeout = tool_input.get("timeout", 300)
+        timeout = tool_input.get("timeout", 60)
 
         if not command.strip():
             return ToolResult(output="Error: Empty command", is_error=True)
