@@ -150,19 +150,24 @@ def load_skills_from_dir(base_path: Path, source: str) -> list[Skill]:
 
 
 def discover_skills(cwd: str = "") -> list[Skill]:
-    """Discover all skills from personal and project directories.
+    """Discover all skills from all directories.
 
-    Priority: personal skills override project skills with the same name.
+    Priority (later overrides earlier): agents-standard < project < personal.
     """
     seen: dict[str, Skill] = {}
 
-    # Project-level skills (lower priority)
+    # Agent Skills open standard: ~/.agents/skills/ (lowest priority)
+    agents_skills_dir = Path.home() / ".agents" / "skills"
+    for skill in load_skills_from_dir(agents_skills_dir, "agents"):
+        seen[skill.name] = skill
+
+    # Project-level skills
     if cwd:
         project_skills_dir = Path(cwd) / ".noah" / "skills"
         for skill in load_skills_from_dir(project_skills_dir, "project"):
             seen[skill.name] = skill
 
-    # Personal skills (higher priority — overwrites project)
+    # Personal skills (highest priority — overwrites project)
     personal_skills_dir = get_config_dir() / "skills"
     for skill in load_skills_from_dir(personal_skills_dir, "personal"):
         seen[skill.name] = skill
