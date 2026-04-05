@@ -116,14 +116,14 @@ async def cmd_buddy(state: AppState, args: str, commands: dict[str, Command]) ->
 
     if action == "hatch":
         companion = hatch_companion(uid)
-        sprite = render_sprite(companion.species)
+        sprite = render_sprite(companion)
         return f"{sprite}\n\nHatched: {companion.name} the {companion.species}! {RARITY_STARS.get(companion.rarity, '')}"
 
     companion = get_companion(uid)
     if not companion:
         return "No companion yet! Use /buddy hatch to get one."
 
-    sprite = render_sprite(companion.species)
+    sprite = render_sprite(companion)
     return f"{sprite}\n\n{companion.name} the {companion.species} {RARITY_STARS.get(companion.rarity, '')}"
 
 
