@@ -381,6 +381,17 @@ class QueryEngine:
             )
             if on_tool_end:
                 on_tool_end(tool_use.name, tool_use.id, tool_use.input, result)
+
+            # After shell commands, check for newly installed skills
+            if tool_use.name in ("bash", "powershell") and not result.is_error:
+                self._check_for_new_skills(result)
+
+            # After file_write of a SKILL.md, reload skills
+            if tool_use.name == "file_write" and not result.is_error:
+                path = tool_use.input.get("file_path", "")
+                if "SKILL.md" in path or "skills" in path.replace("\\", "/"):
+                    self._reload_skills()
+
             return result
         except Exception as e:
             logger.error("Tool %s failed: %s", tool_use.name, e, exc_info=True)
@@ -388,6 +399,35 @@ class QueryEngine:
             if on_tool_end:
                 on_tool_end(tool_use.name, tool_use.id, tool_use.input, err_result)
             return err_result
+
+    def _check_for_new_skills(self, result: ToolResult) -> None:
+        """Check if a shell command installed new skills and auto-import them."""
+        from .services.skills import auto_import_from_agents_dir, discover_skills, get_skills_description
+        from .commands import register_skill_commands
+
+        imported = auto_import_from_agents_dir()
+        if not imported:
+            return
+
+        # Reload skills and update state
+        skills = discover_skills(self.state.cwd)
+        self.state._skills = skills
+        self.state._skills_description = get_skills_description(skills)
+
+        # Register new skill commands on the REPL (if accessible)
+        # Append import info to the tool result so the model knows
+        names = ", ".join(imported)
+        result.output += f"\n\n[Noah: Auto-imported {len(imported)} new skill(s): {names}. Available now via /skills.]"
+        logger.info("Auto-imported skills: %s", names)
+
+    def _reload_skills(self) -> None:
+        """Reload all skills (after a SKILL.md was written)."""
+        from .services.skills import discover_skills, get_skills_description
+
+        skills = discover_skills(self.state.cwd)
+        self.state._skills = skills
+        self.state._skills_description = get_skills_description(skills)
+        logger.info("Reloaded skills: %d total", len(skills))
 
     def _prepare_messages(self) -> list[dict[str, Any]]:
         """Prepare messages for the API call."""
